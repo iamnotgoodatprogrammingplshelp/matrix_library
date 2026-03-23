@@ -1,85 +1,104 @@
-#include <iostream>
-#include <array>
-#include <stdexcept>
+#include "matrix.h"
+#include <stdlib.h>
+#include <stdio.h>
 
-template <size_t R, size_t C, typename T = float>
-class DroneMatrix {
-private:
-    std::array<T, R * C> data;
-
-public:
-    DroneMatrix() {
-        data.fill(static_cast<T>(0));
+Matrix *matrix_create(size_t rows, size_t cols) {
+    Matrix *m = malloc(sizeof(Matrix));
+    if (!m) return NULL;
+    m->rows = rows;
+    m->cols = cols;
+    m->data = calloc(rows * cols, sizeof(double));
+    if (!m->data) {
+        free(m);
+        return NULL;
     }
-
-    T& operator()(size_t row, size_t col) {
-        return data[row * C + col];
-    }
-
-    const T& operator()(size_t row, size_t col) const {
-        return data[row * C + col];
-    }
-
-    DroneMatrix<R, C, T> operator+(const DroneMatrix<R, C, T>& other) const {
-        DroneMatrix<R, C, T> result;
-        for (size_t i = 0; i < R * C; ++i) {
-            result.data[i] = this->data[i] + other.data[i];
-        }
-        return result;
-    }
-
-    template <size_t P>
-    DroneMatrix<R, P, T> operator*(const DroneMatrix<C, P, T>& other) const {
-        DroneMatrix<R, P, T> result;
-        for (size_t i = 0; i < R; ++i) {
-            for (size_t j = 0; j < P; ++j) {
-                T sum = 0;
-                for (size_t k = 0; k < C; ++k) {
-                    sum += (*this)(i, k) * other(k, j);
-                }
-                result(i, j) = sum;
-            }
-        }
-        return result;
-    }
-
-    DroneMatrix<C, R, T> transpose() const {
-        DroneMatrix<C, R, T> result;
-        for (size_t i = 0; i < R; ++i) {
-            for (size_t j = 0; j < C; ++j) {
-                result(j, i) = (*this)(i, j);
-            }
-        }
-        return result;
-    }
-
-    void print() const {
-        for (size_t i = 0; i < R; ++i) {
-            for (size_t j = 0; j < C; ++j) {
-                std::cout << (*this)(i, j) << " ";
-            }
-            std::cout << "\n";
-        }
-    }
-};
-
-int main() {
-    DroneMatrix<3, 3, float> A;
-    A(0, 0) = 1.0f; A(0, 1) = 0.01f; A(0, 2) = 0.0f;
-    A(1, 0) = 0.0f; A(1, 1) = 1.0f;  A(1, 2) = 0.01f;
-    A(2, 0) = 0.0f; A(2, 1) = 0.0f;  A(2, 2) = 1.0f;
-
-    DroneMatrix<3, 1, float> x_k;
-    x_k(0, 0) = 10.0f;
-    x_k(1, 0) = 2.0f;
-    x_k(2, 0) = 0.1f;
-
-    DroneMatrix<3, 1, float> x_next = A * x_k;
-
-    x_next.print();
-
-    return 0;
+    return m;
 }
+
+void matrix_free(Matrix *m) {
+    if (!m) return;
+    free(m->data);
+    free(m);
+}
+
+double matrix_get(const Matrix *m, size_t i, size_t j) {
+    return m->data[i * m->cols + j];
+}
+
+void matrix_set(Matrix *m, size_t i, size_t j, double val) {
+    m->data[i * m->cols + j] = val;
+}
+
+Matrix *matrix_add(const Matrix *a, const Matrix *b) {
+    if (!a || !b || a->rows != b->rows || a->cols != b->cols) return NULL;
+    Matrix *r = matrix_create(a->rows, a->cols);
+    if (!r) return NULL;
+    for (size_t i = 0; i < a->rows * a->cols; i++) r->data[i] = a->data[i] + b->data[i];
+    return r;
+}
+
+Matrix *matrix_sub(const Matrix *a, const Matrix *b) {
+    if (!a || !b || a->rows != b->rows || a->cols != b->cols) return NULL;
+    Matrix *r = matrix_create(a->rows, a->cols);
+    if (!r) return NULL;
+    for (size_t i = 0; i < a->rows * a->cols; i++) r->data[i] = a->data[i] - b->data[i];
+    return r;
+}
+
+Matrix *matrix_mul(const Matrix *a, const Matrix *b) {
+    if (!a || !b || a->cols != b->rows) return NULL;
+    Matrix *r = matrix_create(a->rows, b->cols);
+    if (!r) return NULL;
+    for (size_t i = 0; i < a->rows; i++) {
+        for (size_t j = 0; j < b->cols; j++) {
+            double sum = 0.0;
+            for (size_t k = 0; k < a->cols; k++) sum += matrix_get(a, i, k) * matrix_get(b, k, j);
+            matrix_set(r, i, j, sum);
         }
     }
+    return r;
 }
+
+Matrix *matrix_transpose(const Matrix *a) {
+    if (!a) return NULL;
+    Matrix *r = matrix_create(a->cols, a->rows);
+    if (!r) return NULL;
+    for (size_t i = 0; i < a->rows; i++) for (size_t j = 0; j < a->cols; j++) matrix_set(r, j, i, matrix_get(a, i, j));
+    return r;
+}
+
+Matrix *matrix_identity(size_t n) {
+    Matrix *m = matrix_create(n, n);
+    if (!m) return NULL;
+    for (size_t i = 0; i < n; i++) matrix_set(m, i, i, 1.0);
+    return m;
+}
+
+double matrix_det(const Matrix *a) {
+    if (!a || a->rows != a->cols) return 0.0;
+    size_t n = a->rows;
+    Matrix *t = matrix_create(n, n);
+    if (!t) return 0.0;
+    for (size_t i = 0; i < n * n; i++) t->data[i] = a->data[i];
+    double det = 1.0;
+    for (size_t i = 0; i < n; i++) {
+        if (matrix_get(t, i, i) == 0.0) { matrix_free(t); return 0.0; }
+        for (size_t j = i + 1; j < n; j++) {
+            double r = matrix_get(t, j, i) / matrix_get(t, i, i);
+            for (size_t k = 0; k < n; k++) matrix_set(t, j, k, matrix_get(t, j, k) - r * matrix_get(t, i, k));
+        }
+        det *= matrix_get(t, i, i);
+    }
+    matrix_free(t);
+    return det;
+}
+
+void matrix_print(const Matrix *m) {
+    if (!m) return;
+    for (size_t i = 0; i < m->rows; i++) {
+        for (size_t j = 0; j < m->cols; j++) printf("%.2f ", matrix_get(m, i, j));
+        printf("\n");
+    }
+}
+
+
